@@ -46,9 +46,13 @@ export default function App() {
     }
   }, [selectedStock]);
 
-  const loadMarketData = () => {
-    setStocks(fetchLiveStockData());
-    setIndices(fetchMarketIndices());
+  const loadMarketData = async () => {
+    const [stockData, indexData] = await Promise.all([
+      fetchLiveStockData(),
+      fetchMarketIndices(),
+    ]);
+    setStocks(stockData);
+    setIndices(indexData);
   };
 
   const analyzeStock = async (symbol: string) => {
@@ -58,7 +62,7 @@ export default function App() {
     await new Promise(resolve => setTimeout(resolve, 1500));
     
     const stock = stocks.find(s => s.symbol === symbol) || stocks[0];
-    const historical = fetchHistoricalData(symbol);
+    const historical = await fetchHistoricalData(symbol);
     setHistoricalData(historical);
     
     // Run all AI agents
