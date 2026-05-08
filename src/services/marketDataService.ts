@@ -1,99 +1,96 @@
 import { Stock, MarketData } from '../types';
 
-// Simulated live market data - In production, replace with actual API calls
-// For Indian market: NSE/BSE APIs, Alpha Vantage, Yahoo Finance, etc.
+const API_BASE = '/api/quotes';
 
-const INDIAN_STOCKS = [
-  { symbol: 'RELIANCE', name: 'Reliance Industries Ltd' },
-  { symbol: 'TCS', name: 'Tata Consultancy Services' },
-  { symbol: 'HDFCBANK', name: 'HDFC Bank Ltd' },
-  { symbol: 'INFY', name: 'Infosys Ltd' },
-  { symbol: 'ICICIBANK', name: 'ICICI Bank Ltd' },
-  { symbol: 'HINDUNILVR', name: 'Hindustan Unilever Ltd' },
-  { symbol: 'ITC', name: 'ITC Ltd' },
-  { symbol: 'SBIN', name: 'State Bank of India' },
-  { symbol: 'BHARTIARTL', name: 'Bharti Airtel Ltd' },
-  { symbol: 'KOTAKBANK', name: 'Kotak Mahindra Bank' },
-];
-
-// Generate realistic stock data with Indian market characteristics
-function generateStockData(symbol: string, name: string): Stock {
-  const basePrice = Math.random() * 3000 + 100;
-  const changePercent = (Math.random() - 0.5) * 8; // ±4%
-  const change = basePrice * (changePercent / 100);
-  const price = basePrice + change;
-  
-  return {
-    symbol,
-    name,
-    price: parseFloat(price.toFixed(2)),
-    change: parseFloat(change.toFixed(2)),
-    changePercent: parseFloat(changePercent.toFixed(2)),
-    volume: Math.floor(Math.random() * 10000000) + 100000,
-    high: parseFloat((price * (1 + Math.random() * 0.03)).toFixed(2)),
-    low: parseFloat((price * (1 - Math.random() * 0.03)).toFixed(2)),
-    open: parseFloat((basePrice + (Math.random() - 0.5) * 20).toFixed(2)),
-    prevClose: parseFloat(basePrice.toFixed(2)),
-  };
+export async function fetchLiveStockData(): Promise<Stock[]> {
+  try {
+    const res = await fetch(API_BASE);
+    if (!res.ok) throw new Error(`API error ${res.status}`);
+    const { stocks } = await res.json();
+    return stocks;
+  } catch (err) {
+    console.error('fetchLiveStockData failed, using mock:', err);
+    return getMockStocks();
+  }
 }
 
-export function fetchLiveStockData(): Stock[] {
-  return INDIAN_STOCKS.map(stock => generateStockData(stock.symbol, stock.name));
+export async function fetchStockDetails(symbol: string): Promise<Stock> {
+  const stocks = await fetchLiveStockData();
+  return stocks.find(s => s.symbol === symbol) ?? stocks[0];
 }
 
-export function fetchStockDetails(symbol: string): Stock {
-  const stock = INDIAN_STOCKS.find(s => s.symbol === symbol) || INDIAN_STOCKS[0];
-  return generateStockData(stock.symbol, stock.name);
+export async function fetchMarketIndices(): Promise<MarketData[]> {
+  try {
+    const res = await fetch(`${API_BASE}?type=indices`);
+    if (!res.ok) throw new Error(`API error ${res.status}`);
+    const raw = await res.json();
+
+    const indexMap: Record<string, string> = { '13': 'NIFTY 50', '51': 'SENSEX', '25': 'NIFTY BANK' };
+    return (raw.data?.NSE_INDEX || []).map((item: any) => {
+      const value = item.lastTradedPrice;
+      const prevClose = item.previousClosePrice ?? value;
+      const change = parseFloat((value - prevClose).toFixed(2));
+      return {
+        index: indexMap[item.securityId] ?? item.securityId,
+        value: parseFloat(value.toFixed(2)),
+        change,
+        changePercent: parseFloat(((change / prevClose) * 100).toFixed(2)),
+      };
+    });
+  } catch (err) {
+    console.error('fetchMarketIndices failed, using mock:', err);
+    return getMockIndices();
+  }
 }
 
-export function fetchMarketIndices(): MarketData[] {
+export async function fetchHistoricalData(_symbol: string, days: number = 30) {
+  // Dhan historical candles endpoint — requires separate integration
+  return getMockHistorical(days);
+}
+
+// ── Fallback mock data ──────────────────────────────────────────────────────
+
+function getMockStocks(): Stock[] {
+  const STOCKS = [
+    { symbol: 'RELIANCE', name: 'Reliance Industries Ltd' },
+    { symbol: 'TCS', name: 'Tata Consultancy Services' },
+    { symbol: 'HDFCBANK', name: 'HDFC Bank Ltd' },
+    { symbol: 'INFY', name: 'Infosys Ltd' },
+    { symbol: 'ICICIBANK', name: 'ICICI Bank Ltd' },
+  ];
+  return STOCKS.map(({ symbol, name }) => {
+    const price = parseFloat((Math.random() * 3000 + 100).toFixed(2));
+    const change = parseFloat(((Math.random() - 0.5) * 80).toFixed(2));
+    return {
+      symbol, name, price,
+      change,
+      changePercent: parseFloat(((change / price) * 100).toFixed(2)),
+      volume: Math.floor(Math.random() * 1e7),
+      high: parseFloat((price * 1.02).toFixed(2)),
+      low: parseFloat((price * 0.98).toFixed(2)),
+      open: parseFloat((price - change).toFixed(2)),
+      prevClose: parseFloat((price - change).toFixed(2)),
+    };
+  });
+}
+
+function getMockIndices(): MarketData[] {
   return [
-    {
-      index: 'NIFTY 50',
-      value: 21500 + Math.random() * 500,
-      change: (Math.random() - 0.5) * 200,
-      changePercent: (Math.random() - 0.5) * 2,
-    },
-    {
-      index: 'SENSEX',
-      value: 71000 + Math.random() * 1000,
-      change: (Math.random() - 0.5) * 400,
-      changePercent: (Math.random() - 0.5) * 2,
-    },
-    {
-      index: 'NIFTY BANK',
-      value: 45000 + Math.random() * 1000,
-      change: (Math.random() - 0.5) * 300,
-      changePercent: (Math.random() - 0.5) * 2.5,
-    },
-  ].map(index => ({
-    ...index,
-    value: parseFloat(index.value.toFixed(2)),
-    change: parseFloat(index.change.toFixed(2)),
-    changePercent: parseFloat(index.changePercent.toFixed(2)),
-  }));
+    { index: 'NIFTY 50',   value: 21500, change: 80,  changePercent: 0.37 },
+    { index: 'SENSEX',     value: 71000, change: 240, changePercent: 0.34 },
+    { index: 'NIFTY BANK', value: 45000, change: 150, changePercent: 0.33 },
+  ];
 }
 
-// Historical data for charts
-export function fetchHistoricalData(_symbol: string, days: number = 30) {
+function getMockHistorical(days: number) {
   const data = [];
   const now = new Date();
-  let basePrice = Math.random() * 2000 + 500;
-  
+  let price = 1500;
   for (let i = days; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    
-    // Random walk with slight upward bias
-    const change = (Math.random() - 0.48) * 50;
-    basePrice += change;
-    
-    data.push({
-      date: date.toISOString().split('T')[0],
-      price: parseFloat(basePrice.toFixed(2)),
-      volume: Math.floor(Math.random() * 5000000) + 500000,
-    });
+    price += (Math.random() - 0.48) * 50;
+    data.push({ date: date.toISOString().split('T')[0], price: parseFloat(price.toFixed(2)), volume: Math.floor(Math.random() * 5e6) });
   }
-  
   return data;
 }
